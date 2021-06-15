@@ -11,7 +11,8 @@
 
 * Python >= 3.8
   * click
-  *
+  * numpy
+  * pandas
 
 
 ## Installation

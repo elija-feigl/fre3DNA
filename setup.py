@@ -23,6 +23,8 @@ setup(
     include_package_data=True,
     install_requires=(
         'click',
+        'pandas',
+        'numpy',
     ),
     classifiers=[
         "Programming Language :: Python :: 3",
