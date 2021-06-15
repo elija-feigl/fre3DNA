@@ -1,0 +1,4 @@
+include fre3Dna/README.md
+include fre3Dna/CONTRIBUTIONS.md
+include fre3Dna/LICENSE
+recursive-include fre3Dna/resources *
