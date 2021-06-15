@@ -2,16 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import os
-
-from pathlib import Path
-from shutil import copyfile, copytree
 
 import click
+
 from fre3Dna.version import get_version
 
-
-""" cascaded mrDNA-driven MD flexible fitting:
+""" free form DNA Origami
 """
 logger = logging.getLogger(__name__)
 

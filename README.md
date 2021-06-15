@@ -9,8 +9,8 @@
 
 ## Dependencies
 
-* Python >= 3.7
-  * numpy >= 1.14
+* Python >= 3.8
+  * click
   *
 
 
