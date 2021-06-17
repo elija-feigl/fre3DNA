@@ -6,7 +6,7 @@ import sys
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 
@@ -18,7 +18,8 @@ from .strand import Strand
     but also additional information: intended basepairs, nick positions, etc
 """
 
-BB_DIST = 0.63
+BB_DIST = 0.7564  # oxdna1 0.7525
+OXDNA_L = 0.8518  # nm
 
 
 @dataclass
@@ -27,6 +28,7 @@ class Structure(object):
     strands: Dict[int, Strand] = field(default_factory=dict)
     basepairs: Dict[int, int] = field(default_factory=dict)
     nicks: Dict[int, int] = field(default_factory=dict)
+    scaffold_routing: List[int] = field(default_factory=list)
 
     def __post_init__(self):
         self.logger = logging.getLogger(__name__)
@@ -146,14 +148,27 @@ class Structure(object):
     def categorise_structure(self):
         p5s = (s.tour[0] for s in self.strands.values() if not s.is_scaffold)
         p3s = [s.tour[-1] for s in self.strands.values() if not s.is_scaffold]
+        nicks_staple = dict()
 
         for p5 in p5s:
             p3 = p5.across.p3.across
             if p3 in p3s:
                 self.nicks[p5.id] = p3.id
                 self.nicks[p3.id] = p5.id
+                nicks_staple[p5.strand_id] = p3.strand_id
+
+        first_staple_id = min(nicks_staple.keys())
+        self.scaffold_routing.append(first_staple_id)
+        next_staple_id = nicks_staple[first_staple_id]
+        while next_staple_id != first_staple_id:
+            self.scaffold_routing.append(next_staple_id)
+            next_staple_id = nicks_staple[next_staple_id]
 
     def generate_connectivity_graph(self, cutoff=2.5) -> list:
+        """ generate a list of weighted edges for graph construction.
+            an edge runs from 5' to 3' at a potential junction (scaffold-CO or staple-staple)
+            its weight is the distance between the end or 0 for scaffold-CO
+        """
         weighted_edges = list()
 
         p5s = [s.tour[0] for s in self.strands.values() if not s.is_scaffold]
@@ -168,7 +183,7 @@ class Structure(object):
 
         for p5 in p5s:
             for p3 in p3s:
-                distance = np.linalg.norm(p5.position-p3.position)
+                distance = np.linalg.norm(p5.bb_position()-p3.bb_position())
                 is_close = (distance <= cutoff * BB_DIST)
                 not_self = (p5.strand_id != p3.strand_id)
                 not_nick = (self.bases[self.nicks[p5.id]

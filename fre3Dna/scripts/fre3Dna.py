@@ -74,6 +74,5 @@ def staple(top, conf, forces, cutoff):
     weighted_edges = struct.generate_connectivity_graph(cutoff=cutoff)
 
     graph = nx.MultiGraph()
-    graph.add_nodes_from(sorted(struct.strands.keys()))
+    graph.add_nodes_from(struct.scaffold_routing)
     graph.add_weighted_edges_from(weighted_edges)
-
