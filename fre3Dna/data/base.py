@@ -18,6 +18,11 @@ class Base(object):
     strand_id: Optional[int]
     struct: Any
     position: np.ndarray
+    bb2base_versor: np.ndarray
+    normversor: np.ndarray
+    velocity: np.ndarray
+    angular_velocity: np.ndarray
+
     _p5_id: Optional[int]
     _p3_id: Optional[int]
 

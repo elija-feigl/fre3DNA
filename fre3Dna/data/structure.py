@@ -54,7 +54,13 @@ class Structure(object):
             strand_ids.add(strand_id)
             p3 = int(p3_str) if p3_str != "-1" else None
             p5 = int(p5_str) if p5_str != "-1" else None
-            position = np.array([float(x) for x in line_conf.split()[0:3]])
+
+            base_data = [float(x) for x in line_conf.split()]
+            position = np.array(base_data[0:3])
+            bb2base_versor = np.array(base_data[3:6])
+            normversor = np.array(base_data[6:9])
+            velocity = np.array(base_data[9:12])
+            angular_velocity = np.array(base_data[12:15])
 
             self.bases[base_id] = Base(
                 id=base_id,
@@ -62,6 +68,10 @@ class Structure(object):
                 strand_id=strand_id,
                 struct=self,
                 position=position,
+                bb2base_versor=bb2base_versor,
+                normversor=normversor,
+                velocity=velocity,
+                angular_velocity=angular_velocity,
                 _p5_id=p5,
                 _p3_id=p3,
             )
