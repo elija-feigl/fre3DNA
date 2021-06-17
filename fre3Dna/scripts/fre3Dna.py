@@ -4,8 +4,10 @@
 import logging
 
 import click
+import networkx as nx
 import pandas as pd
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 from fre3Dna.version import get_version
 from fre3Dna.core.attract_prep import get_scaffold_id, get_nicks
@@ -55,11 +57,23 @@ def prep(top, conf):
 @cli.command()
 @click.argument('top', type=click.Path(exists=True))
 @click.argument('conf', type=click.Path(exists=True))
-def staple(top, conf):
+@click.argument('forces', type=click.Path(exists=True))
+@click.argument('cutoff', type=float)
+def staple(top, conf, forces, cutoff):
     """ close staples
 
         TOP is the name of the design file [.top]\n
         CONF is the scaffold strand sequence file [.oxdna, .dat]\n
+        FORCES is the oxDNA external force file containing the basepair information []\n
+        CUTOFF multiple of Backbone-Backbone distance to be considered for staple routing\n
     """
     struct = Structure()
     struct.generate_from_oxDNA(top=Path(top), conf=Path(conf))
+    struct.assign_basepairs(forces=Path(forces))
+    struct.categorise_structure()
+    weighted_edges = struct.generate_connectivity_graph(cutoff=cutoff)
+
+    graph = nx.MultiGraph()
+    graph.add_nodes_from(sorted(struct.strands.keys()))
+    graph.add_weighted_edges_from(weighted_edges)
+

@@ -17,6 +17,7 @@ class Strand(object):
     id: int
     struct: Any
     tour: List[Base]
+    is_scaffold: bool
 
     def __repr__(self) -> str:
         return f"Strand {self.id}, length {self.length()}"

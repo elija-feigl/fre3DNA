@@ -18,11 +18,15 @@ from .strand import Strand
     but also additional information: intended basepairs, nick positions, etc
 """
 
+BB_DIST = 0.63
+
 
 @dataclass
 class Structure(object):
     bases: Dict[int, Base] = field(default_factory=dict)
     strands: Dict[int, Strand] = field(default_factory=dict)
+    basepairs: Dict[int, int] = field(default_factory=dict)
+    nicks: Dict[int, int] = field(default_factory=dict)
 
     def __post_init__(self):
         self.logger = logging.getLogger(__name__)
@@ -50,7 +54,7 @@ class Structure(object):
             strand_ids.add(strand_id)
             p3 = int(p3_str) if p3_str != "-1" else None
             p5 = int(p5_str) if p5_str != "-1" else None
-            position = np.array(line_conf.split()[0:3])
+            position = np.array([float(x) for x in line_conf.split()[0:3]])
 
             self.bases[base_id] = Base(
                 id=base_id,
@@ -67,6 +71,7 @@ class Structure(object):
             base.p5 = self.bases[base._p5_id] if base._p5_id is not None else None
 
         for id in strand_ids:
+            is_scaffold = False
             tour = list()
             tour_unsorted = [
                 base for base in self.bases.values() if base.strand_id == id]
@@ -80,14 +85,87 @@ class Structure(object):
                 tour.append(next_base)
                 next_base = next_base.p3
                 if next_base is start_base:
+                    is_scaffold = True
                     break  # circular strand condition
 
             self.strands[id] = Strand(
                 id=id,
                 struct=self,
                 tour=tour,
+                is_scaffold=is_scaffold,
             )
 
-    def assign_basepairs(self, basepairs):
-        # assign base.across according to some external input file
-        return
+        if (len(self.bases) != n_bases) or (len(self.strands) != n_strands):
+            self.logger.error(
+                "mistakes have been made. number of strands and bases inconsistent")
+            sys.exit(1)
+
+    def assign_basepairs(self, forces: Path):
+        with forces.open() as f:
+            lines = f.readlines()
+
+        is_pair = False
+        for line in lines:
+            if line.startswith("type"):
+                if "mutual_trap" in line:
+                    is_pair = True
+                else:
+                    is_pair = False
+
+            if is_pair and line.startswith("particle"):
+                particle = int(line.split()[-1])
+            if is_pair and line.startswith("ref_particle"):
+                ref_particle = int(line.split()[-1])
+                self.basepairs[particle] = ref_particle
+                is_pair = False
+
+        for i, j in self.basepairs.items():
+            self.bases[i].across = self.bases[j]
+
+        self.logger.debug(f"Assigned {len(self.basepairs)/2} basepairs.")
+        try:
+            for i, j in self.basepairs.items():
+                i_ = self.basepairs[j]
+            if i_ != i:
+                raise KeyError
+        except KeyError:
+            self.logger.error(
+                "mistakes have been made. basepairs inconsistent")
+            sys.exit(1)
+
+    def categorise_structure(self):
+        p5s = (s.tour[0] for s in self.strands.values() if not s.is_scaffold)
+        p3s = [s.tour[-1] for s in self.strands.values() if not s.is_scaffold]
+
+        for p5 in p5s:
+            p3 = p5.across.p3.across
+            if p3 in p3s:
+                self.nicks[p5.id] = p3.id
+                self.nicks[p3.id] = p5.id
+
+    def generate_connectivity_graph(self, cutoff=2.5) -> list:
+        weighted_edges = list()
+
+        p5s = [s.tour[0] for s in self.strands.values() if not s.is_scaffold]
+        p3s = [s.tour[-1] for s in self.strands.values() if not s.is_scaffold]
+
+        for i, j in self.nicks.items():
+            base5 = self.bases[i]
+            if base5 in p5s:
+                base3 = self.bases[j]
+                edge = tuple([base5.strand_id, base3.strand_id, 0.])
+                weighted_edges.append(edge)
+
+        for p5 in p5s:
+            for p3 in p3s:
+                distance = np.linalg.norm(p5.position-p3.position)
+                is_close = (distance <= cutoff * BB_DIST)
+                not_self = (p5.strand_id != p3.strand_id)
+                not_nick = (self.bases[self.nicks[p5.id]
+                                       ].strand_id != p3.strand_id)
+
+                if is_close and not_self and not_nick:
+                    edge = tuple([p5.strand_id, p3.strand_id, distance])
+                    weighted_edges.append(edge)
+
+        return weighted_edges
