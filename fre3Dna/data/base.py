@@ -43,5 +43,21 @@ class Base(object):
     def stack_position(self) -> np.ndarray:
         return self.position + 0.34 * self.bb2base_versor
 
+    def conf(self) -> str:
+        pos = ' '.join(map(str, self.position))
+        v_1 = ' '.join(map(str, self.bb2base_versor))
+        v_3 = ' '.join(map(str, self.normversor))
+        vel = ' '.join(map(str, self.velocity))
+        a_vel = ' '.join(map(str, self.angular_velocity))
+        return f"{pos} {v_1} {v_3} {vel} {a_vel}"
+
+    def top(self) -> str:
+        p3_id = "-1" if self.p3 is None else self.p3.id
+        p5_id = "-1" if self.p5 is None else self.p5.id
+        return f"{self.strand_id} {self.seq} {p3_id} {p5_id}"
+
     def __repr__(self) -> str:
-        return f"Base {self.id}, strand {self.strand_id}, seq {self.seq}"
+        return f"{self.id} {self.top()}"
+
+    def __str__(self) -> str:
+        return f"{self.id}: {self.top()}: {self.conf()}"

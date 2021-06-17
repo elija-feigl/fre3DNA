@@ -1,15 +1,16 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-
 import logging
+import sys
 from dataclasses import dataclass, field
+from operator import attrgetter
 from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
 
+from ..core.util import basepair_trap
 from .base import Base
 from .strand import Strand
 
@@ -30,6 +31,8 @@ class Structure(object):
     nicks: Dict[int, int] = field(default_factory=dict)
     scaffold_routing: List[int] = field(default_factory=list)
 
+    header: List[str] = field(default_factory=list)
+
     def __post_init__(self):
         self.logger = logging.getLogger(__name__)
 
@@ -43,8 +46,9 @@ class Structure(object):
             topology = t.readlines()
             n_bases, n_strands = (int(n) for n in topology.pop(0).split())
         with conf.open() as c:
-            configuration = c.readlines()
-            configuration = configuration[3:]  # discard temp, box, energy
+            lines = c.readlines()
+            self.header = [line[:-1] for line in lines[:3]]
+            configuration = lines[3:]
 
         strand_ids = set()
         for i, line_top in enumerate(topology):
@@ -134,7 +138,7 @@ class Structure(object):
         for i, j in self.basepairs.items():
             self.bases[i].across = self.bases[j]
 
-        self.logger.debug(f"Assigned {len(self.basepairs)/2} basepairs.")
+        self.logger.debug(f"Assigned {len(self.basepairs)//2} basepairs.")
         try:
             for i, j in self.basepairs.items():
                 i_ = self.basepairs[j]
@@ -194,3 +198,33 @@ class Structure(object):
                     weighted_edges.append(edge)
 
         return weighted_edges
+
+    def write_structure(self, prefix: str):
+        top_file = Path(f"{prefix}.top")
+        conf_file = Path(f"{prefix}.oxdna")
+        trap_file = Path(f"{prefix}_bp-trap.txt")
+        n_bakk = 1
+        while top_file.exists() or conf_file.exists():
+            top_file = Path(f"{prefix}_{n_bakk}.top")
+            conf_file = Path(f"{prefix}_{n_bakk}.oxdna")
+            trap_file = Path(f"{prefix}_bp-trap_{n_bakk}.txt")
+            n_bakk += 1
+        self.logger.info(f"Writing files with prefix {prefix}_{n_bakk}")
+
+        topology = [f"{len(self.bases)} {len(self.strands)}"]
+        configuration = self.header.copy()
+        for _, strand in sorted(self.strands.items()):
+            # NOTE: for now assume that base.id is correct (renumberd on insert etc.)
+            for base in sorted(strand.tour, key=attrgetter("id")):
+                topology.append(base.top())
+                configuration.append(base.conf())
+
+        with top_file.open(mode="w") as top:
+            top.write("\n".join(topology))
+
+        with conf_file.open(mode="w") as conf:
+            conf.write("\n".join(configuration))
+
+        with trap_file.open(mode="w") as trap:
+            forces = [basepair_trap(i, j) for i, j in self.basepairs.items()]
+            trap.write("\n".join(forces))
