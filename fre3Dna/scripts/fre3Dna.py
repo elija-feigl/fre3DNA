@@ -4,14 +4,14 @@
 import logging
 
 import click
-import networkx as nx
 import pandas as pd
 from pathlib import Path
-import matplotlib.pyplot as plt
+
 
 from fre3Dna.version import get_version
 from fre3Dna.core.attract_prep import get_scaffold_id, get_nicks
 from fre3Dna.data.structure import Structure
+from fre3Dna.data.graph import Graph
 
 """ free form DNA Origami
 """
@@ -71,8 +71,9 @@ def staple(top, conf, forces, cutoff):
     struct.generate_from_oxDNA(top=Path(top), conf=Path(conf))
     struct.assign_basepairs(forces=Path(forces))
     struct.categorise_structure()
-    weighted_edges = struct.generate_connectivity_graph(cutoff=cutoff)
+    weighted_edges = struct.generate_connectivity(cutoff=cutoff)
 
-    graph = nx.MultiGraph()
-    graph.add_nodes_from(struct.scaffold_routing)
-    graph.add_weighted_edges_from(weighted_edges)
+    # struct.write_structure("test")
+
+    graph = Graph(struct=struct, edges=weighted_edges)
+    graph.draw_graph()
