@@ -10,7 +10,7 @@ from typing import Dict, List
 
 import numpy as np
 
-from ..core.util import basepair_trap
+from ..core.util import basepair_trap, BB_DIST
 from .base import Base
 from .strand import Strand
 
@@ -18,9 +18,6 @@ from .strand import Strand
     It not only contains information from topology and configuration file,
     but also additional information: intended basepairs, nick positions, etc
 """
-
-BB_DIST = 0.7564  # oxdna1 0.7525
-OXDNA_L = 0.8518  # nm
 
 
 @dataclass
@@ -168,7 +165,7 @@ class Structure(object):
             self.scaffold_routing.append(next_staple_id)
             next_staple_id = nicks_staple[next_staple_id]
 
-    def generate_connectivity_graph(self, cutoff=2.5) -> list:
+    def generate_connectivity(self, cutoff=2.5) -> list:
         """ generate a list of weighted edges for graph construction.
             an edge runs from 5' to 3' at a potential junction (scaffold-CO or staple-staple)
             its weight is the distance between the end or 0 for scaffold-CO

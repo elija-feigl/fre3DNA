@@ -1,6 +1,10 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+BB_DIST = 0.7564  # oxdna1 0.7525
+OXDNA_L = 0.8518  # nm
+
+
 def basepair_trap(particle: int, ref_particle: int) -> str:
     trap = ["{",
             "type = mutual_trap",
