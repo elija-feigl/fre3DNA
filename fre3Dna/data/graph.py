@@ -23,11 +23,26 @@ class Graph(object):
 
     def __post_init__(self):
         self.logger = logging.getLogger(__name__)
+
         self.G = nx.MultiDiGraph()
         self.G.add_nodes_from(self.struct.scaffold_routing)
         self.G.add_weighted_edges_from(self.edges)
 
+        self.G_scaffold = nx.MultiDiGraph()
+        self.G_scaffold.add_nodes_from(self.struct.scaffold_routing)
+        scaffold_edges = [(u, v, w) for (u, v, w) in self.edges if w == 0.]
+        self.G_scaffold.add_weighted_edges_from(scaffold_edges)
+
+        self.G_staple = nx.MultiDiGraph()
+        self.G_staple.add_nodes_from(self.struct.scaffold_routing)
+        staple_edges = [(u, v, w) for (u, v, w) in self.edges if w != 0.]
+        self.G_staple.add_weighted_edges_from(staple_edges)
+
+    def recompose_G(self):
+        self.G = nx.compose(self.G_scaffold, self.G_staple)
+
     def draw_graph(self, arrows=False):
+        self.recompose_G()
         plt.figure(figsize=(8.0, 10.0))
         plt.axis('off')
 
@@ -66,4 +81,5 @@ class Graph(object):
                 * every node can only have one in- one out-edge (except scaffold)
                 * nodes must form triplets if possible
         """
+
         return
