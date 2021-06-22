@@ -196,7 +196,10 @@ class Structure(object):
 
         return weighted_edges
 
-    def write_structure(self, prefix: str):
+    def write_structure(self, prefix: str, is_reorder=True):
+        if is_reorder:
+            self._reorder_structure()
+
         top_file = Path(f"{prefix}.top")
         conf_file = Path(f"{prefix}.oxdna")
         trap_file = Path(f"{prefix}_bp-trap.txt")
@@ -211,7 +214,7 @@ class Structure(object):
         topology = [f"{len(self.bases)} {len(self.strands)}"]
         configuration = self.header.copy()
         for _, strand in sorted(self.strands.items()):
-            # NOTE: for now assume that base.id is correct (renumberd on insert etc.)
+            # NOTE: might produce unusable topology on unordered strucutre
             for base in sorted(strand.tour, key=attrgetter("id")):
                 topology.append(base.top())
                 configuration.append(base.conf())
@@ -225,3 +228,33 @@ class Structure(object):
         with trap_file.open(mode="w") as trap:
             forces = [basepair_trap(i, j) for i, j in self.basepairs.items()]
             trap.write("\n".join(forces))
+
+    def link_strands(self, n_insert=0):
+        """ connect two strands
+            this operation requires full renumbering of the structure before writing
+                to guarantee compatibility with oxDNA tools
+            if strand ends are far apart they can be connected by adding n_insert T bases
+        """
+        return
+
+    def _reorder_structure(self):
+        """ many oxDNA tools require specific base ordering to work properly:
+            * strictly increasing staple number
+            * strictly increasing base number per staple
+        """
+        tmp_strands = self.strands.copy()
+        self.strands.clear()
+        self.bases.clear()
+
+        tmp_strand_idx = 1
+        tmp_base_idx = 0
+
+        for strand in tmp_strands.values():
+            for base in strand.tour:
+                base.id = tmp_base_idx
+                self.bases[tmp_base_idx] = base
+                tmp_base_idx += 1
+
+            strand.id = tmp_strand_idx
+            self.strands[tmp_strand_idx] = strand
+            tmp_strand_idx += 1
