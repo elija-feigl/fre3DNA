@@ -279,3 +279,19 @@ class Structure(object):
         self.strands.pop(strand2.id)
 
         return strand1.id, strand2.id
+
+    def staple(self, connections: list):
+        staple_id_chain: Dict[int, int] = dict()
+        for u, v, w in connections:
+            # TODO: check if safe
+            while u in staple_id_chain:
+                u = staple_id_chain[u]
+            while v in staple_id_chain:
+                v = staple_id_chain[v]
+
+            if u == v:
+                self.logger.debug("skipping circularizing connection")
+                continue
+            n_insert = (w/BB_DIST) // 1.2
+            new_id, old_id = self.link_strands(u, v, n_insert)
+            staple_id_chain[old_id] = new_id

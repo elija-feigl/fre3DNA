@@ -158,3 +158,19 @@ class Graph(object):
         self.G.add_weighted_edges_from(edges)
         self._expand_graph_data()
 
+    def get_routing(self, max_bb_multi=1.2):
+        pairs = [(u, v, d["distance"]) for (u, v, d) in self.get_edges(
+            "53") if d["bb_multi"] < max_bb_multi]
+        us = [u for u, _, _ in pairs]
+        vs = [v for _, v, _ in pairs]
+
+        nicks = list()
+        for u, v in self.struct.nicks.items():
+            if u not in us + vs:
+                base5 = self.struct.bases[u]
+                base3 = self.struct.bases[v]
+                distance = np.linalg.norm(
+                    base5.bb_position()-base3.bb_position())
+                if distance/BB_DIST < max_bb_multi:
+                    nicks.append((base5.strand_id, base3.strand_id, distance))
+        return pairs  # + nicks # nicks still of. maybe caused by renumbering??
