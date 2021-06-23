@@ -155,7 +155,6 @@ class Structure(object):
             p3 = p5.across.p3.across
             if p3 in p3s:
                 self.nicks[p5.id] = p3.id
-                self.nicks[p3.id] = p5.id
                 nicks_staple[p5.strand_id] = p3.strand_id
 
         first_staple_id = min(nicks_staple.keys())
@@ -171,30 +170,60 @@ class Structure(object):
             its weight is the distance between the end or 0 for scaffold-CO
         """
         weighted_edges = list()
+        p5_bases = [s.tour[0]
+                    for s in self.strands.values() if not s.is_scaffold]
+        p3_bases = [s.tour[-1]
+                    for s in self.strands.values() if not s.is_scaffold]
 
-        p5s = [s.tour[0] for s in self.strands.values() if not s.is_scaffold]
-        p3s = [s.tour[-1] for s in self.strands.values() if not s.is_scaffold]
+        for p3, p5 in self.nicks.items():
+            base5 = self.bases[p5]
+            base3 = self.bases[p3]
+            distance = np.linalg.norm(
+                base5.bb_position()-base3.bb_position())
+            edge_scaffold = tuple([base3.strand_id, base5.strand_id, 0.])
+            edge_staple = tuple([base5.strand_id, base3.strand_id, -distance])
 
-        for i, j in self.nicks.items():
-            base5 = self.bases[i]
-            if base5 in p5s:
-                base3 = self.bases[j]
-                edge = tuple([base5.strand_id, base3.strand_id, 0.])
-                weighted_edges.append(edge)
+            weighted_edges.append(edge_scaffold)
+            weighted_edges.append(edge_staple)
 
-        for p5 in p5s:
-            for p3 in p3s:
-                distance = np.linalg.norm(p5.bb_position()-p3.bb_position())
+        for base5 in p5_bases:
+            for base3 in p3_bases:
+                distance = np.linalg.norm(
+                    base5.bb_position()-base3.bb_position())
                 is_close = (distance <= cutoff * BB_DIST)
-                not_self = (p5.strand_id != p3.strand_id)
-                not_nick = (self.bases[self.nicks[p5.id]
-                                       ].strand_id != p3.strand_id)
+                not_self = (base5.strand_id != base3.strand_id)
+                not_nick = (self.bases[self.nicks[base5.id]
+                                       ].strand_id != base3.strand_id)
 
                 if is_close and not_self and not_nick:
-                    edge = tuple([p5.strand_id, p3.strand_id, distance])
+                    edge = tuple([base5.strand_id, base3.strand_id, distance])
                     weighted_edges.append(edge)
-
         return weighted_edges
+
+    def _reorder_structure(self):
+        """ many oxDNA tools require specific base ordering to work properly:
+            * strictly increasing staple number
+            * strictly increasing base number per staple
+        """
+        self.logger.debug("reordering structure")
+
+        tmp_strands = self.strands.copy()
+        self.strands.clear()
+        self.bases.clear()
+
+        tmp_strand_idx = 1
+        tmp_base_idx = 0
+
+        for strand in tmp_strands.values():
+            for base in strand.tour:
+                base.id = tmp_base_idx
+                base.strand_id = tmp_strand_idx
+                self.bases[tmp_base_idx] = base
+                tmp_base_idx += 1
+
+            strand.id = tmp_strand_idx
+            self.strands[tmp_strand_idx] = strand
+            tmp_strand_idx += 1
 
     def write_structure(self, prefix: str, is_reorder=True):
         if is_reorder:
@@ -229,32 +258,24 @@ class Structure(object):
             forces = [basepair_trap(i, j) for i, j in self.basepairs.items()]
             trap.write("\n".join(forces))
 
-    def link_strands(self, n_insert=0):
+    def link_strands(self, strand_id_p5: int, strand_id_p3: int, n_insert=0):
         """ connect two strands
             this operation requires full renumbering of the structure before writing
                 to guarantee compatibility with oxDNA tools
             if strand ends are far apart they can be connected by adding n_insert T bases
         """
-        return
+        # self.logger.debug(f"linking {strand_id_p5}, {strand_id_p3}")
+        strand1 = self.strands[strand_id_p3]
+        strand2 = self.strands[strand_id_p5]
 
-    def _reorder_structure(self):
-        """ many oxDNA tools require specific base ordering to work properly:
-            * strictly increasing staple number
-            * strictly increasing base number per staple
-        """
-        tmp_strands = self.strands.copy()
-        self.strands.clear()
-        self.bases.clear()
+        for base in strand2.tour:
+            base.strand_id = strand1.id
 
-        tmp_strand_idx = 1
-        tmp_base_idx = 0
+        # TODO create additional bases
+        strand1.tour[-1].p3 = strand2.tour[0]
+        strand2.tour[0].p5 = strand1.tour[-1]
+        strand1.tour += strand2.tour
 
-        for strand in tmp_strands.values():
-            for base in strand.tour:
-                base.id = tmp_base_idx
-                self.bases[tmp_base_idx] = base
-                tmp_base_idx += 1
+        self.strands.pop(strand2.id)
 
-            strand.id = tmp_strand_idx
-            self.strands[tmp_strand_idx] = strand
-            tmp_strand_idx += 1
+        return strand1.id, strand2.id
