@@ -28,38 +28,35 @@ class Graph(object):
         self.G = nx.DiGraph()
         self.G.add_nodes_from(self.struct.scaffold_routing)
         self.G.add_weighted_edges_from(self.edges)
+        self._expand_graph_data()
 
-        self.G_scaffold = nx.DiGraph()
-        self.G_scaffold.add_nodes_from(self.struct.scaffold_routing)
-        scaffold_edges = [(u, v, w) for (u, v, w) in self.edges if w == 0.]
-        self.G_scaffold.add_weighted_edges_from(scaffold_edges)
+    def _expand_graph_data(self):
 
-        self.G_staple = nx.DiGraph()
-        self.G_staple.add_nodes_from(self.struct.scaffold_routing)
-        staple_edges = [(u, v, w) for (u, v, w) in self.edges if w != 0.]
-        self.G_staple.add_weighted_edges_from(staple_edges)
-
-    def recompose_G(self):
-        self.G = nx.compose(self.G_scaffold, self.G_staple)
+        for edge in self.G.edges(data=True):
+            w = edge[2]["weight"]
+            edge[2]["distance"] = abs(w)
+            edge[2]["bb_multi"] = abs(w) / BB_DIST
+            edge[2]["is_scaffold"] = True if w == 0. else False
+            edge[2]["is_nick"] = True if w < 0. else False
+            edge[2]["is_53"] = True if w > 0. else False
 
     def draw_graph(self, arrows=True):
-        self.recompose_G()
         plt.figure(figsize=(8.0, 10.0))
         plt.axis('off')
 
         pos = nx.shell_layout(self.G, rotate=0)
         scaffold = [(u, v) for (u, v, d) in self.G.edges(
-            data=True) if d["weight"] == 0.]
+            data=True) if d["is_scaffold"]]
         short = [(u, v) for (u, v, d) in self.G.edges(
-            data=True) if 0. < d["weight"]/BB_DIST < 0.8]
+            data=True) if 0. < d["bb_multi"] < 0.8]
         direct = [(u, v) for (u, v, d) in self.G.edges(
-            data=True) if 0.8 < d["weight"]/BB_DIST < 1.2]
+            data=True) if 0.8 < d["bb_multi"] < 1.2]
         middle = [(u, v) for (u, v, d) in self.G.edges(
-            data=True) if 1.2 < d["weight"]/BB_DIST < 1.7]
+            data=True) if 1.2 < d["bb_multi"] < 1.7]
         spaceT = [(u, v) for (u, v, d) in self.G.edges(
-            data=True) if 1.7 < d["weight"]/BB_DIST < 2.3]
+            data=True) if 1.7 < d["bb_multi"] < 2.3]
         long = [(u, v) for (u, v, d) in self.G.edges(
-            data=True) if 2.3 < d["weight"]/BB_DIST]
+            data=True) if 2.3 < d["bb_multi"]]
         nx.draw_networkx_edges(self.G, pos, edgelist=scaffold,
                                edge_color="b", arrows=arrows, connectionstyle="arc3,rad=0.2")
         nx.draw_networkx_edges(self.G, pos, edgelist=short,
@@ -79,14 +76,29 @@ class Graph(object):
         plt.title("network_graph (b = sc, g < 1.5, r > 1.5)")
         plt.show()
 
+    def get_edges(self, typ=""):
+        if typ == "53":
+            return [(u, v, d) for (u, v, d) in self.G.edges(data=True) if d["is_53"]]
+        elif typ == "nick":
+            return [(u, v, d) for (u, v, d) in self.G.edges(data=True) if d["is_nick"]]
+        elif typ == "scaffold":
+            return [(u, v, d) for (u, v, d) in self.G.edges(data=True) if d["is_scaffold"]]
+        elif typ == "":
+            return [(u, v, d) for (u, v, d) in self.G.edges(data=True)]
+        else:
+            raise KeyError
+
     def network_stats(self):
         """ 5'3' stats
         """
-        self.logger.info(f"staple_edges: {len(self.G_staple.edges)}")
-        self.logger.info(f"scaffold_edges: {len(self.G_scaffold.edges)}")
+        n_staple_edges = len(self.get_edges("53"))
+        self.logger.info(f"staple_edges: {n_staple_edges}")
+        n_scaffold_edges = len(self.get_edges("scaffold"))
+        self.logger.info(f"scaffold_edges: {n_scaffold_edges}")
+        n_nick_edges = len(self.get_edges("nick"))
+        self.logger.info(f"nick_edges: {n_nick_edges}")
 
-        bb_multiples = [d["weight"]/BB_DIST
-                        for (_, _, d) in self.G_staple.edges(data=True)]
+        bb_multiples = [d["bb_multi"] for (_, _, d) in self.get_edges("53")]
         return bb_multiples
 
     def draw_network_stats(self):
@@ -117,9 +129,9 @@ class Graph(object):
         # simple reduction
         out_edges = list()
         # single exit
-        for node_ids in self.G_staple.nodes:
+        for node_ids in self.G.nodes:
             all_edges = [(node_ids, v, d["weight"])
-                         for v, d in self.G_staple[node_ids].items()]
+                         for v, d in self.G[node_ids].items() if d["is_53"] > 0.]
             if all_edges:
                 best_edge = min(all_edges, key=lambda e: e[2])
                 out_edges.append(best_edge)
@@ -133,8 +145,16 @@ class Graph(object):
                 clear_ids.add(enter_id)
                 edges.append(edge)
 
-        self.logger.info(f"all: {len(self.G_staple.edges)}")
+        n_53_edges = len(self.get_edges("53"))
+        self.logger.info(f"all: {n_53_edges}")
         self.logger.info(f"simple: {len(edges)}")
 
-        self.G_staple.clear_edges()
-        self.G_staple.add_weighted_edges_from(edges)
+        edges += [(u, v, d["weight"]) for (u, v, d) in self.get_edges("scaffold")]
+
+        # TODO: reduce nicks too
+        edges += [(u, v, d["weight"]) for (u, v, d) in self.get_edges("nick")]
+
+        self.G.clear_edges()
+        self.G.add_weighted_edges_from(edges)
+        self._expand_graph_data()
+
