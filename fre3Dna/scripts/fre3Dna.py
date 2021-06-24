@@ -73,7 +73,14 @@ def staple(top, conf, forces, cutoff):
     struct.categorise_structure()
     weighted_edges = struct.generate_connectivity(cutoff=cutoff)
 
-    # struct.write_structure("test")
-
     graph = Graph(struct=struct, edges=weighted_edges)
+
+    graph.draw_network_stats()
+    graph.reduce_graph_simple()
+    struct.staple(graph.get_routing(max_bb_multi=3.3))
+    struct.structure_stats()
+
+    struct.write_structure("test")
+
     graph.draw_graph()
+    graph.draw_network_stats()
