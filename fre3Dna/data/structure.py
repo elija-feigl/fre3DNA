@@ -164,7 +164,7 @@ class Structure(object):
             self.scaffold_routing.append(next_staple_id)
             next_staple_id = nicks_staple[next_staple_id]
 
-    def generate_connectivity(self, cutoff=2.5) -> list:
+    def generate_connectivity(self, cutoff=3.5) -> list:
         """ generate a list of weighted edges for graph construction.
             an edge runs from 5' to 3' at a potential junction (scaffold-CO or staple-staple)
             its weight is the distance between the end or 0 for scaffold-CO
@@ -180,12 +180,15 @@ class Structure(object):
             base3 = self.bases[p3]
             distance = np.linalg.norm(
                 base5.bb_position()-base3.bb_position())
-            edge_scaffold = tuple([base3.strand_id, base5.strand_id, 0.])
-            edge_staple = tuple([base5.strand_id, base3.strand_id, -distance])
+            # NOTE: nicks are distinguished by negative sign of weight
+            weight = -distance
+            edge_scaffold = tuple([base5.strand_id, base3.strand_id, None])
+            edge_staple = tuple([base3.strand_id, base5.strand_id, weight])
 
             weighted_edges.append(edge_scaffold)
             weighted_edges.append(edge_staple)
 
+        # NOTE: a 53 pair of two adjacent (not nick) segments might override a scaffold edge
         for base5 in p5_bases:
             for base3 in p3_bases:
                 distance = np.linalg.norm(
@@ -257,6 +260,12 @@ class Structure(object):
         with trap_file.open(mode="w") as trap:
             forces = [basepair_trap(i, j) for i, j in self.basepairs.items()]
             trap.write("\n".join(forces))
+
+    def structure_stats(self):
+        n_strands = len(self.strands)
+        self.logger.info(f"Number of staples: {n_strands}")
+        len_strands = sorted(s.length() for s in self.strands.values())
+        self.logger.info(f"Length of staples: {len_strands}")
 
     def link_strands(self, strand_id_p5: int, strand_id_p3: int, n_insert=0):
         """ connect two strands
