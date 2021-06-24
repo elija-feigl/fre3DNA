@@ -10,7 +10,7 @@ from typing import Dict, List
 
 import numpy as np
 
-from ..core.util import basepair_trap, BB_DIST
+from ..core.util import basepair_trap, bb_position_2_base_position, BB_DIST
 from .base import Base
 from .strand import Strand
 
@@ -264,16 +264,55 @@ class Structure(object):
                 to guarantee compatibility with oxDNA tools
             if strand ends are far apart they can be connected by adding n_insert T bases
         """
-        # self.logger.debug(f"linking {strand_id_p5}, {strand_id_p3}")
+        def unit(v: np.ndarray) -> np.ndarray:
+            return v / np.linalg.norm(v)
+
         strand1 = self.strands[strand_id_p3]
         strand2 = self.strands[strand_id_p5]
 
         for base in strand2.tour:
             base.strand_id = strand1.id
 
-        # TODO create additional bases
-        strand1.tour[-1].p3 = strand2.tour[0]
-        strand2.tour[0].p5 = strand1.tour[-1]
+        last_strand1 = strand1.tour[-1]
+        first_strand2 = strand2.tour[0]
+        if n_insert:
+            last2first = first_strand2.bb_position() - last_strand1.bb_position()
+            # NOTE: flipping the T base, as 53 pairs usualy point away from each other
+            bb2base_versor = -1.0 * unit(
+                0.5 * (last_strand1.bb2base_versor + first_strand2.bb2base_versor))
+            normversor = unit(
+                0.5 * (last_strand1.normversor + first_strand2.normversor))
+            for _ in range(n_insert):
+                spacing = 1. / (n_insert + 1)
+                base_id = max(self.bases.keys()) + 1
+
+                bb_position = last_strand1.bb_position() + spacing * last2first
+                position = bb_position_2_base_position(
+                    bb_position, normversor=normversor, bb2base_versor=bb2base_versor)
+
+                new_base = Base(
+                    id=base_id,
+                    seq="T",
+                    strand_id=strand1.id,
+                    struct=self,
+                    position=position,
+                    bb2base_versor=bb2base_versor,
+                    normversor=normversor,
+                    velocity=last_strand1.velocity,
+                    angular_velocity=last_strand1.angular_velocity,
+                )
+
+                new_base.p3 = first_strand2
+                first_strand2.p5 = new_base
+                new_base.p5 = last_strand1
+                last_strand1.p3 = new_base
+
+                self.bases[base_id] = new_base
+                strand1.tour.append(new_base)
+                last_strand1 = new_base
+
+        last_strand1.p3 = first_strand2
+        first_strand2.p5 = last_strand1
         strand1.tour += strand2.tour
 
         self.strands.pop(strand2.id)
@@ -292,6 +331,6 @@ class Structure(object):
             if u == v:
                 self.logger.debug("skipping circularizing connection")
                 continue
-            n_insert = (w/BB_DIST) // 1.2
+            n_insert = int((w/BB_DIST) // 1.2)
             new_id, old_id = self.link_strands(u, v, n_insert)
             staple_id_chain[old_id] = new_id
