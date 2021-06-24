@@ -23,8 +23,8 @@ class Base(object):
     velocity: np.ndarray
     angular_velocity: np.ndarray
 
-    _p5_id: Optional[int]
-    _p3_id: Optional[int]
+    _p5_id: Optional[int] = None
+    _p3_id: Optional[int] = None
 
     p5: Optional["Base"] = None
     p3: Optional["Base"] = None

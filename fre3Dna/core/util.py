@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+import numpy as np
 
 BB_DIST = 0.7564  # oxdna1 0.7525
 OXDNA_L = 0.8518  # nm
@@ -15,3 +16,10 @@ def basepair_trap(particle: int, ref_particle: int) -> str:
             "PBC=1",
             "}"]
     return "\n".join(trap)
+
+
+def bb_position_2_base_position(bb_position, normversor, bb2base_versor) -> np.ndarray:
+    """ base position calculated from backbone position for oxDNA2 (w. grooving)
+    """
+    thrid_versor = np.cross(normversor, bb2base_versor)
+    return bb_position + 0.34 * bb2base_versor - 0.3408 * thrid_versor
