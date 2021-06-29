@@ -283,7 +283,7 @@ class Structure(object):
             sequences = ["Length, ID, Sequence"]
             for i, strand in enumerate(self.strands.values()):
                 seq = "".join(b.seq for b in strand.tour)
-                sequences.append(f"{strand.length()}, {strand.id}, {seq}")
+                sequences.append(f"{len(strand)}, {strand.id}, {seq}")
 
         with seq_file.open(mode="w") as top:
             top.write("\n".join(sequences))
@@ -291,7 +291,7 @@ class Structure(object):
     def structure_stats(self):
         n_strands = len(self.strands)
         self.logger.info(f"Number of staples: {n_strands}")
-        len_strands = sorted(s.length() for s in self.strands.values())
+        len_strands = sorted(len(s) for s in self.strands.values())
         self.logger.info(f"Length of staples: {len_strands}")
 
     def link_strands(self, strand_id_p5: int, strand_id_p3: int, n_insert=0):

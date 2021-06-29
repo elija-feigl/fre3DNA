@@ -20,7 +20,7 @@ class Strand(object):
     is_scaffold: bool
 
     def __repr__(self) -> str:
-        return f"Strand {self.id}, length {self.length()}"
+        return f"Strand {self.id}, length {len(self)}"
 
     def p5(self) -> Base:
         return self.tour[0]
@@ -28,5 +28,5 @@ class Strand(object):
     def p3(self) -> Base:
         return self.tour[-1]
 
-    def length(self) -> int:
+    def __len__(self) -> int:
         return len(self.tour)
