@@ -261,6 +261,33 @@ class Structure(object):
             forces = [basepair_trap(i, j) for i, j in self.basepairs.items()]
             trap.write("\n".join(forces))
 
+    def write_sequences(self, prefix: str, is_idt_order=True):
+        seq_file = Path(f"{prefix}_sequences.csv")
+        n_bakk = 1
+        while seq_file.exists():
+            seq_file = Path(f"{prefix}_sequences_{n_bakk}.csv")
+            n_bakk += 1
+        # TODO: logger wrong if file is new
+        self.logger.info(
+            f"Writing sequence file with prefix {prefix}_{n_bakk}")
+
+        if is_idt_order:
+            sequences = ["Well Position, Name, Sequence"]
+            for i, strand in enumerate(self.strands.values()):
+                if not strand.is_scaffold:
+                    pos = f"{chr(i//12 + 65)}{i%12+1}"
+                    name = f"{prefix}_{strand.id}"
+                    seq = "".join(b.seq for b in strand.tour)
+                    sequences.append(f"{pos}, {name}, {seq}")
+        else:
+            sequences = ["Length, ID, Sequence"]
+            for i, strand in enumerate(self.strands.values()):
+                seq = "".join(b.seq for b in strand.tour)
+                sequences.append(f"{strand.length()}, {strand.id}, {seq}")
+
+        with seq_file.open(mode="w") as top:
+            top.write("\n".join(sequences))
+
     def structure_stats(self):
         n_strands = len(self.strands)
         self.logger.info(f"Number of staples: {n_strands}")
