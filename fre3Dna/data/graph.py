@@ -44,23 +44,14 @@ class Graph(object):
 
         for edge in self.G.edges(data=True):
             w = edge[2]["weight"]
-            if w is None:
-                edge[2]["is_scaffold"] = True
-                edge[2]["is_nick"] = False
-                edge[2]["is_53"] = False
-                edge[2]["distance"] = 0.
-                edge[2]["bb_multi"] = 0.
-                edge[2]["penalty"] = 0.
-            else:
-                edge[2]["is_scaffold"] = False
-                edge[2]["is_nick"] = True if w < 0. else False
-                edge[2]["is_53"] = True if w > 0. else False
-                edge[2]["distance"] = abs(w)
-                edge[2]["bb_multi"] = abs(w) / BB_DIST
+            edge[2]["is_nick"] = True if w < 0. else False
+            edge[2]["is_53"] = True if w > 0. else False
+            edge[2]["distance"] = abs(w)
+            edge[2]["bb_multi"] = abs(w) / BB_DIST
 
-                edge[2]["sc_distance"] = scaffold_distance(edge[0], edge[1])
-                edge[2]["penalty"] = (
-                    abs(w) + BB_DIST * (w < 0.) + scaffold_distance(edge[0], edge[1], True) * BB_DIST)
+            edge[2]["sc_distance"] = scaffold_distance(edge[0], edge[1])
+            edge[2]["penalty"] = (abs(w) / BB_DIST + BB_DIST * (w < 0.) +
+                                  scaffold_distance(edge[0], edge[1], True) * BB_DIST)
 
     def draw_graph(self, arrows=True):
         plt.figure(figsize=(8.0, 10.0))
@@ -68,8 +59,6 @@ class Graph(object):
 
         pos = nx.shell_layout(self.G, rotate=0)
         _ = nx.draw_networkx_labels(self.G, pos=pos)
-        # scaffold = [(u, v) for (u, v, d) in self.G.edges(
-        #    data=True) if d["is_scaffold"]]
         nick = [(u, v) for (u, v, d) in self.G.edges(
             data=True) if d["is_nick"]]
         short = [(u, v) for (u, v, d) in self.G.edges(
@@ -82,8 +71,7 @@ class Graph(object):
             data=True) if 1.7 < d["bb_multi"] < 2.3 and d["is_53"]]
         long = [(u, v) for (u, v, d) in self.G.edges(
             data=True) if 2.3 < d["bb_multi"] and d["is_53"]]
-        # nx.draw_networkx_edges(self.G, pos, edgelist=scaffold,
-        #                      edge_color="b", arrows=arrows, connectionstyle="arc3,rad=0.2")
+
         nx.draw_networkx_edges(self.G, pos, edgelist=nick,
                                edge_color="r", arrows=arrows, connectionstyle="arc3,rad=0.2")
         nx.draw_networkx_edges(self.G, pos, edgelist=short,
@@ -104,7 +92,7 @@ class Graph(object):
         plt.show()
 
     def get_edges(self, typ=""):
-        if typ in ["53", "nick", "scaffold"]:
+        if typ in ["53", "nick"]:
             return [(u, v, d) for (u, v, d) in self.G.edges(data=True) if d[f"is_{typ}"]]
         elif typ == "":
             return [(u, v, d) for (u, v, d) in self.G.edges(data=True)]
@@ -116,16 +104,11 @@ class Graph(object):
         """
         n_staple_edges = len(self.get_edges("53"))
         self.logger.info(f"staple_edges: {n_staple_edges}")
-        n_scaffold_edges = len(self.get_edges("scaffold"))
-        self.logger.info(f"scaffold_edges: {n_scaffold_edges}")
         n_nick_edges = len(self.get_edges("nick"))
         self.logger.info(f"nick_edges: {n_nick_edges}")
+        self.logger.info(f"isolates: {len(list(nx.isolates(self.G)))}")
 
-        # TODO: without scaffold...
-        # self.logger.info(f"isolates: {len(list(nx.isolates(self.G)))}")
-
-        edges = [(u, v, d) for (u, v, d) in self.get_edges(
-            typ="") if not d["is_scaffold"]]
+        edges = self.get_edges(typ="")
         avg_penalty = sum(d["penalty"] for _, _, d in edges) / len(edges)
         self.logger.info(f"avg_penalty: {avg_penalty}")
         avg_weight = sum(d["weight"] for _, _, d in edges) / len(edges)
@@ -191,9 +174,6 @@ class Graph(object):
                 nicks.append(nick)
         edges += nicks
 
-        edges += [(u, v, d["weight"])
-                  for (u, v, d) in self.get_edges("scaffold")]
-
         self.G.clear_edges()
         self.G.add_weighted_edges_from(edges)
         self._expand_graph_data()
@@ -201,7 +181,7 @@ class Graph(object):
     def reduce_graph_isofree(self):
         """ reduce graph for staple routing, improved version
             conditions:
-                * every node can only have one in- one out-edge (except scaffold)
+                * every node can only have one in- one out-edge
                 * all staples between 21 and 84 bases
             approach:
                 * perform simple routing
@@ -243,10 +223,6 @@ class Graph(object):
         self.reduce_graph_simple()
 
         _g = self.G.copy()
-        scaffold_edges = [(u, v, d["weight"])
-                          for (u, v, d) in self.get_edges("scaffold")]
-        for u, v, _ in scaffold_edges:
-            _g.remove_edge(u, v)
 
         # single element
         # outgoing
@@ -291,14 +267,12 @@ class Graph(object):
             longest_path = nx.dag_longest_path(_g, weight="n")
 
         self.G = _g
-        self.G.add_weighted_edges_from(scaffold_edges)
-
         self._expand_graph_data()
 
     def reduce_graph_reverse_simple(self):
         """ reduce graph for staple routing, improved version
             conditions:
-                * every node can only have one in- one out-edge (except scaffold)
+                * every node can only have one in- one out-edge
                 * all staples between 21 and 84 bases
             approach:
                 iteratively add edges to empty graph
@@ -318,8 +292,6 @@ class Graph(object):
                      for (u, v, d) in self.get_edges(typ="53")]
         nick_edges = [(u, v, d["weight"], d["penalty"])
                       for (u, v, d) in self.get_edges(typ="nick")]
-        scaffold_edges = [(u, v, d["weight"])
-                          for (u, v, d) in self.get_edges("scaffold")]
 
         _g = nx.DiGraph()
         _g.add_nodes_from(self.struct.scaffold_routing)
@@ -349,7 +321,6 @@ class Graph(object):
             longest_path = nx.dag_longest_path(_g, weight="n")
 
         self.G = _g
-        self.G.add_weighted_edges_from(scaffold_edges)
         self._expand_graph_data()
 
     def get_routing(self, max_bb_multi=2.3):

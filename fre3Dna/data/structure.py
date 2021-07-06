@@ -182,13 +182,9 @@ class Structure(object):
                 base5.bb_position()-base3.bb_position())
             # NOTE: nicks are distinguished by negative sign of weight
             weight = -distance
-            edge_scaffold = tuple([base3.strand_id, base5.strand_id, None])
             edge_staple = tuple([base5.strand_id, base3.strand_id, weight])
-
-            weighted_edges.append(edge_scaffold)
             weighted_edges.append(edge_staple)
 
-        # NOTE: a 53 pair of two adjacent (not nick) segments might override a scaffold edge
         for base5 in p5_bases:
             for base3 in p3_bases:
                 distance = np.linalg.norm(
