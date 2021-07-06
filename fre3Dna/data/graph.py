@@ -121,6 +121,16 @@ class Graph(object):
         n_nick_edges = len(self.get_edges("nick"))
         self.logger.info(f"nick_edges: {n_nick_edges}")
 
+        # TODO: without scaffold...
+        # self.logger.info(f"isolates: {len(list(nx.isolates(self.G)))}")
+
+        edges = [(u, v, d) for (u, v, d) in self.get_edges(
+            typ="") if not d["is_scaffold"]]
+        avg_penalty = sum(d["penalty"] for _, _, d in edges) / len(edges)
+        self.logger.info(f"avg_penalty: {avg_penalty}")
+        avg_weight = sum(d["weight"] for _, _, d in edges) / len(edges)
+        self.logger.info(f"avg_weight: {avg_weight}")
+
         bb_multiples = [d["bb_multi"] for (_, _, d) in self.get_edges("53")]
         return bb_multiples
 
