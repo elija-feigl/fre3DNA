@@ -104,12 +104,8 @@ class Graph(object):
         plt.show()
 
     def get_edges(self, typ=""):
-        if typ == "53":
-            return [(u, v, d) for (u, v, d) in self.G.edges(data=True) if d["is_53"]]
-        elif typ == "nick":
-            return [(u, v, d) for (u, v, d) in self.G.edges(data=True) if d["is_nick"]]
-        elif typ == "scaffold":
-            return [(u, v, d) for (u, v, d) in self.G.edges(data=True) if d["is_scaffold"]]
+        if typ in ["53", "nick", "scaffold"]:
+            return [(u, v, d) for (u, v, d) in self.G.edges(data=True) if d[f"is_{typ}"]]
         elif typ == "":
             return [(u, v, d) for (u, v, d) in self.G.edges(data=True)]
         else:
@@ -261,9 +257,15 @@ class Graph(object):
                 if try_replace_in(_g, candidate):
                     break
 
-        # circles
-        circular = list(nx.simple_cycles(_g))
-        # TODO
+        # cycles
+        for cycle in nx.simple_cycles(_g):
+            edges = list()
+            for i, u in enumerate(cycle):
+                v = cycle[(i+1) % len(cycle)]
+                penalty = _g[u][v]["penalty"]
+                edges.append((u, v, penalty))
+            max_edge = max(edges, key=lambda e: e[2])
+            _g.remove_edge(max_edge[0], max_edge[1])
 
         # long
         # TODO
@@ -271,6 +273,50 @@ class Graph(object):
         self.G = _g
         self.G.add_weighted_edges_from(scaffold_edges)
 
+        self._expand_graph_data()
+
+    def reduce_graph_reverse_simple(self):
+        """ reduce graph for staple routing, improved version
+            conditions:
+                * every node can only have one in- one out-edge (except scaffold)
+                * all staples between 21 and 84 bases
+            approach:
+                iteratively add edges to empty graph
+        """
+        def edge_step(_g: nx.DiGraph, edge):
+            u, v, weight, penalty = edge
+
+            u_is_free = not bool(_g[u])
+            v_is_free = not bool([w for _, w in _g.edges if w == v])
+
+            if u_is_free and v_is_free:
+                _g.add_edge(u, v, weight=weight)
+                _g[u][v]["penalty"] = penalty
+
+        _53_edges = [(u, v, d["weight"], d["penalty"])
+                     for (u, v, d) in self.get_edges(typ="53")]
+        nick_edges = [(u, v, d["weight"], d["penalty"])
+                      for (u, v, d) in self.get_edges(typ="nick")]
+        scaffold_edges = [(u, v, d["weight"])
+                          for (u, v, d) in self.get_edges("scaffold")]
+
+        _g = nx.DiGraph()
+        _g.add_nodes_from(self.struct.scaffold_routing)
+
+        for edge in sorted(_53_edges, key=lambda e: e[3]) + sorted(nick_edges, key=lambda e: e[3]):
+            edge_step(_g, edge)
+
+        for cycle in nx.simple_cycles(_g):
+            edges = list()
+            for i, u in enumerate(cycle):
+                v = cycle[(i+1) % len(cycle)]
+                penalty = _g[u][v]["penalty"]
+                edges.append((u, v, penalty))
+            max_edge = max(edges, key=lambda e: e[2])
+            _g.remove_edge(max_edge[0], max_edge[1])
+
+        self.G = _g
+        self.G.add_weighted_edges_from(scaffold_edges)
         self._expand_graph_data()
 
     def get_routing(self, max_bb_multi=2.3):
