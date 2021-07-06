@@ -31,6 +31,16 @@ class Graph(object):
         self._expand_graph_data()
 
     def _expand_graph_data(self):
+        def scaffold_distance(node1, node2, relative=False):
+            routing = self.struct.scaffold_routing
+            idx1 = routing.index(node1)
+            idx2 = routing.index(node2)
+            dist = min((idx1 - idx2) % len(routing),
+                       (idx2 - idx1) % len(routing)) - 1
+            if relative:
+                return dist / len(routing)
+            else:
+                return dist
 
         for edge in self.G.edges(data=True):
             w = edge[2]["weight"]
@@ -40,6 +50,7 @@ class Graph(object):
                 edge[2]["is_53"] = False
                 edge[2]["distance"] = 0.
                 edge[2]["bb_multi"] = 0.
+                edge[2]["penalty"] = 0.
             else:
                 edge[2]["is_scaffold"] = False
                 edge[2]["is_nick"] = True if w < 0. else False
@@ -47,13 +58,18 @@ class Graph(object):
                 edge[2]["distance"] = abs(w)
                 edge[2]["bb_multi"] = abs(w) / BB_DIST
 
+                edge[2]["sc_distance"] = scaffold_distance(edge[0], edge[1])
+                edge[2]["penalty"] = (
+                    abs(w) + BB_DIST * (w < 0.) + scaffold_distance(edge[0], edge[1], True) * BB_DIST)
+
     def draw_graph(self, arrows=True):
         plt.figure(figsize=(8.0, 10.0))
         plt.axis('off')
 
         pos = nx.shell_layout(self.G, rotate=0)
-        scaffold = [(u, v) for (u, v, d) in self.G.edges(
-            data=True) if d["is_scaffold"]]
+        _ = nx.draw_networkx_labels(self.G, pos=pos)
+        # scaffold = [(u, v) for (u, v, d) in self.G.edges(
+        #    data=True) if d["is_scaffold"]]
         nick = [(u, v) for (u, v, d) in self.G.edges(
             data=True) if d["is_nick"]]
         short = [(u, v) for (u, v, d) in self.G.edges(
@@ -66,8 +82,8 @@ class Graph(object):
             data=True) if 1.7 < d["bb_multi"] < 2.3 and d["is_53"]]
         long = [(u, v) for (u, v, d) in self.G.edges(
             data=True) if 2.3 < d["bb_multi"] and d["is_53"]]
-        nx.draw_networkx_edges(self.G, pos, edgelist=scaffold,
-                               edge_color="b", arrows=arrows, connectionstyle="arc3,rad=0.2")
+        # nx.draw_networkx_edges(self.G, pos, edgelist=scaffold,
+        #                      edge_color="b", arrows=arrows, connectionstyle="arc3,rad=0.2")
         nx.draw_networkx_edges(self.G, pos, edgelist=nick,
                                edge_color="r", arrows=arrows, connectionstyle="arc3,rad=0.2")
         nx.draw_networkx_edges(self.G, pos, edgelist=short,
@@ -137,15 +153,14 @@ class Graph(object):
                 * pick the best outgoing per node
                 * pick best incomming per node
         """
-        # simple reduction
         out_edges = list()
         # single exit
         for node_ids in self.G.nodes:
-            all_edges = [(node_ids, v, d["weight"])
+            all_edges = [(node_ids, v, d["weight"], d["penalty"])
                          for v, d in self.G[node_ids].items() if d["is_53"]]
             if all_edges:
-                best_edge = min(all_edges, key=lambda e: e[2])
-                out_edges.append(best_edge)
+                best_edge = min(all_edges, key=lambda e: e[3])
+                out_edges.append(best_edge[:-1])
 
         # single enter
         edges = list()
@@ -175,6 +190,87 @@ class Graph(object):
 
         self.G.clear_edges()
         self.G.add_weighted_edges_from(edges)
+        self._expand_graph_data()
+
+    def reduce_graph_isofree(self):
+        """ reduce graph for staple routing, improved version
+            conditions:
+                * every node can only have one in- one out-edge (except scaffold)
+                * all staples between 21 and 84 bases
+            approach:
+                * perform simple routing
+                * iterate over isolated nodes and try to add node
+                * iterate over double nodes and try to add node
+                * cut long staples
+        """
+        def try_replace_out(_g, edge) -> bool:
+            target = edge[1]
+            sources_old = [u for (u, v) in _g.edges() if v == target]
+            if sources_old:
+                source_old = sources_old[0]
+            else:  # NOTE: if old source has been remodef by isolator fix
+                _g.add_edge(edge[0], edge[1], weight=edge[2]["weight"])
+                return True
+
+            if [u for (u, v) in _g.edges() if v == source_old]:
+                _g.remove_edge(source_old, target)
+                _g.add_edge(edge[0], edge[1], weight=edge[2]["weight"])
+                return True
+            return False
+
+        def try_replace_in(_g, edge) -> bool:
+            source = edge[0]
+            targets_old = [v for (u, v) in _g.edges() if u == source]
+            if targets_old:
+                target_old = targets_old[0]
+            else:  # NOTE: if old source has been remodef by isolator fix
+                _g.add_edge(edge[0], edge[1], weight=edge[2]["weight"])
+                return True
+
+            if [v for (u, v) in _g.edges() if u == target_old]:
+                _g.remove_edge(source, target_old)
+                _g.add_edge(edge[0], edge[1], weight=edge[2]["weight"])
+                return True
+            return False
+
+        old_edges = self.get_edges(typ="53") + self.get_edges(typ="nick")
+        self.reduce_graph_simple()
+
+        _g = self.G.copy()
+        scaffold_edges = [(u, v, d["weight"])
+                          for (u, v, d) in self.get_edges("scaffold")]
+        for u, v, _ in scaffold_edges:
+            _g.remove_edge(u, v)
+
+        # single element
+        # outgoing
+        for isolate in list(nx.isolates(_g)):
+            candidates_out = sorted([(u, v, d) for (
+                u, v, d) in old_edges if isolate == u and abs(u-v) > 1], key=lambda e: e[2]["penalty"])
+            while candidates_out:
+                candidate = candidates_out.pop()
+                if try_replace_out(_g, candidate):
+                    break
+
+        # incomming
+        for isolate in list(nx.isolates(_g)):
+            candidates_in = sorted([(u, v, d) for (
+                u, v, d) in old_edges if isolate == v and abs(u-v) > 1], key=lambda e: e[2]["penalty"])
+            while candidates_in:
+                candidate = candidates_in.pop()
+                if try_replace_in(_g, candidate):
+                    break
+
+        # circles
+        circular = list(nx.simple_cycles(_g))
+        # TODO
+
+        # long
+        # TODO
+
+        self.G = _g
+        self.G.add_weighted_edges_from(scaffold_edges)
+
         self._expand_graph_data()
 
     def get_routing(self, max_bb_multi=2.3):

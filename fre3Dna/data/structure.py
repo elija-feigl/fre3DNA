@@ -182,8 +182,8 @@ class Structure(object):
                 base5.bb_position()-base3.bb_position())
             # NOTE: nicks are distinguished by negative sign of weight
             weight = -distance
-            edge_scaffold = tuple([base5.strand_id, base3.strand_id, None])
-            edge_staple = tuple([base3.strand_id, base5.strand_id, weight])
+            edge_scaffold = tuple([base3.strand_id, base5.strand_id, None])
+            edge_staple = tuple([base5.strand_id, base3.strand_id, weight])
 
             weighted_edges.append(edge_scaffold)
             weighted_edges.append(edge_staple)
@@ -313,7 +313,7 @@ class Structure(object):
         first_strand2 = strand2.tour[0]
         if n_insert:
             last2first = first_strand2.bb_position() - last_strand1.bb_position()
-            # NOTE: flipping the T base, as 53 pairs usualy point away from each other
+            # NOTE: flipping the T base, as 53 pairs usually point away from each other
             bb2base_versor = -1.0 * unit(
                 0.5 * (last_strand1.bb2base_versor + first_strand2.bb2base_versor))
             normversor = unit(
