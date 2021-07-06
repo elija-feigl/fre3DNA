@@ -268,7 +268,17 @@ class Graph(object):
             _g.remove_edge(max_edge[0], max_edge[1])
 
         # long
-        # TODO
+        longest_path = nx.dag_longest_path(_g, weight="n")
+        while len(longest_path) > 11:  # TODO: replace with cumulative n < 80
+            edges = list()
+            for i, u in enumerate(longest_path):
+                if (1 < i < len(longest_path)-3):  # NOTE: avoid short strands
+                    v = longest_path[(i+1) % len(longest_path)]
+                    penalty = _g[u][v]["penalty"]
+                    edges.append((u, v, penalty))
+            max_edge = max(edges, key=lambda e: e[2])
+            _g.remove_edge(max_edge[0], max_edge[1])
+            longest_path = nx.dag_longest_path(_g, weight="n")
 
         self.G = _g
         self.G.add_weighted_edges_from(scaffold_edges)
@@ -292,6 +302,7 @@ class Graph(object):
             if u_is_free and v_is_free:
                 _g.add_edge(u, v, weight=weight)
                 _g[u][v]["penalty"] = penalty
+                _g[u][v]["n"] = 7  # TODO: node size?
 
         _53_edges = [(u, v, d["weight"], d["penalty"])
                      for (u, v, d) in self.get_edges(typ="53")]
@@ -314,6 +325,18 @@ class Graph(object):
                 edges.append((u, v, penalty))
             max_edge = max(edges, key=lambda e: e[2])
             _g.remove_edge(max_edge[0], max_edge[1])
+
+        longest_path = nx.dag_longest_path(_g, weight="n")
+        while len(longest_path) > 11:  # TODO: replace with cumulative n < 80
+            edges = list()
+            for i, u in enumerate(longest_path):
+                if (1 < i < len(longest_path)-3):  # NOTE: avoid short strands
+                    v = longest_path[(i+1) % len(longest_path)]
+                    penalty = _g[u][v]["penalty"]
+                    edges.append((u, v, penalty))
+            max_edge = max(edges, key=lambda e: e[2])
+            _g.remove_edge(max_edge[0], max_edge[1])
+            longest_path = nx.dag_longest_path(_g, weight="n")
 
         self.G = _g
         self.G.add_weighted_edges_from(scaffold_edges)
