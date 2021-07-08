@@ -132,59 +132,32 @@ class Graph(object):
         f.suptitle("53_pairs_distr")
         plt.show()
 
-    def reduce_graph_simple(self):
-        """ reduce graph for staple routing
-            conditions:
-                * every node can only have one in- one out-edge (except scaffold)
-                # * nodes must form triplets if possible
+    def split_long_paths(self):
+        # TODO: weak_components might be faster
+        longest_path = nx.dag_longest_path(self.G, weight="n")
+        while len(longest_path) > 11:  # TODO: replace with cumulative n < 80
+            edges = list()
+            for i, u in enumerate(longest_path):
+                if (1 < i < len(longest_path)-3):  # NOTE: avoid short strands
+                    v = longest_path[(i+1) % len(longest_path)]
+                    penalty = self.G[u][v]["penalty"]
+                    edges.append((u, v, penalty))
+            max_edge = max(edges, key=lambda e: e[2])
+            self.G.remove_edge(max_edge[0], max_edge[1])
+            longest_path = nx.dag_longest_path(self.G, weight="n")
 
-            simple:
-                * pick the best outgoing per node
-                * pick best incomming per node
-        """
-        out_edges = list()
-        # single exit
-        for node_ids in self.G.nodes:
-            all_edges = [(node_ids, v, d["weight"], d["penalty"])
-                         for v, d in self.G[node_ids].items() if d["is_53"]]
-            if all_edges:
-                best_edge = min(all_edges, key=lambda e: e[3])
-                out_edges.append(best_edge[:-1])
+    def split_cylces(self):
+        for cycle in nx.simple_cycles(self.G):
+            edges = list()
+            for i, u in enumerate(cycle):
+                v = cycle[(i+1) % len(cycle)]
+                penalty = self.G[u][v]["penalty"]
+                edges.append((u, v, penalty))
+            max_edge = max(edges, key=lambda e: e[2])
+            self.G.remove_edge(max_edge[0], max_edge[1])
 
-        # single enter
-        edges = list()
-        clear_ids = set()
-        for edge in sorted(out_edges, key=lambda e: (e[1], e[2])):
-            enter_id = edge[1]
-            if enter_id not in clear_ids:
-                clear_ids.add(enter_id)
-                edges.append(edge)
-
-        n_53_edges = len(self.get_edges("53"))
-        self.logger.info(f"all: {n_53_edges}")
-        self.logger.info(f"simple: {len(edges)}")
-
-        all_nicks = [(u, v, d["weight"])
-                     for (u, v, d) in self.get_edges("nick")]
-        nicks = list()
-        for nick in all_nicks:
-            is_53start = nick[0] in [u for u, _, _ in edges]
-            is_53end = nick[1] in [v for _, v, _ in edges]
-            if not is_53start and not is_53end:
-                nicks.append(nick)
-        edges += nicks
-
-        self.G.clear_edges()
-        self.G.add_weighted_edges_from(edges)
-        self._expand_graph_data()
-
-    def reduce_graph_isofree(self):
-        """ reduce graph for staple routing, improved version
-            conditions:
-                * every node can only have one in- one out-edge
-                * all staples between 21 and 84 bases
-            approach:
-                * perform simple routing
+    def reduce_isolates(self, possible_edges):
+        """ reduce number of isolates, improved version
                 * iterate over isolated nodes and try to add node
                 * iterate over double nodes and try to add node
                 * cut long staples
@@ -219,16 +192,13 @@ class Graph(object):
                 return True
             return False
 
-        old_edges = self.get_edges(typ="53") + self.get_edges(typ="nick")
-        self.reduce_graph_simple()
-
         _g = self.G.copy()
 
         # single element
         # outgoing
         for isolate in list(nx.isolates(_g)):
             candidates_out = sorted([(u, v, d) for (
-                u, v, d) in old_edges if isolate == u and abs(u-v) > 1], key=lambda e: e[2]["penalty"])
+                u, v, d) in possible_edges if isolate == u and abs(u-v) > 1], key=lambda e: e[2]["penalty"])
             while candidates_out:
                 candidate = candidates_out.pop()
                 if try_replace_out(_g, candidate):
@@ -237,39 +207,67 @@ class Graph(object):
         # incomming
         for isolate in list(nx.isolates(_g)):
             candidates_in = sorted([(u, v, d) for (
-                u, v, d) in old_edges if isolate == v and abs(u-v) > 1], key=lambda e: e[2]["penalty"])
+                u, v, d) in possible_edges if isolate == v and abs(u-v) > 1], key=lambda e: e[2]["penalty"])
             while candidates_in:
                 candidate = candidates_in.pop()
                 if try_replace_in(_g, candidate):
                     break
 
-        # cycles
-        for cycle in nx.simple_cycles(_g):
-            edges = list()
-            for i, u in enumerate(cycle):
-                v = cycle[(i+1) % len(cycle)]
-                penalty = _g[u][v]["penalty"]
-                edges.append((u, v, penalty))
-            max_edge = max(edges, key=lambda e: e[2])
-            _g.remove_edge(max_edge[0], max_edge[1])
-
-        # long
-        longest_path = nx.dag_longest_path(_g, weight="n")
-        while len(longest_path) > 11:  # TODO: replace with cumulative n < 80
-            edges = list()
-            for i, u in enumerate(longest_path):
-                if (1 < i < len(longest_path)-3):  # NOTE: avoid short strands
-                    v = longest_path[(i+1) % len(longest_path)]
-                    penalty = _g[u][v]["penalty"]
-                    edges.append((u, v, penalty))
-            max_edge = max(edges, key=lambda e: e[2])
-            _g.remove_edge(max_edge[0], max_edge[1])
-            longest_path = nx.dag_longest_path(_g, weight="n")
-
         self.G = _g
         self._expand_graph_data()
 
-    def reduce_graph_reverse_simple(self):
+    def reduce_graph_direct(self, reduce_iso=True):
+        """ reduce graph for staple routing
+            conditions:
+                * every node can only have one in- one out-edge (except scaffold)
+                # * nodes must form triplets if possible
+
+            simple:
+                * pick the best outgoing per node
+                * pick best incomming per node
+        """
+        possible_edges = self.get_edges(typ="53") + self.get_edges(typ="nick")
+
+        out_edges = list()
+        # single exit
+        for node_ids in self.G.nodes:
+            all_edges = [(node_ids, v, d["weight"], d["penalty"])
+                         for v, d in self.G[node_ids].items() if d["is_53"]]
+            if all_edges:
+                best_edge = min(all_edges, key=lambda e: e[3])
+                out_edges.append(best_edge[:-1])
+
+        # single enter
+        edges = list()
+        clear_ids = set()
+        for edge in sorted(out_edges, key=lambda e: (e[1], e[2])):
+            enter_id = edge[1]
+            if enter_id not in clear_ids:
+                clear_ids.add(enter_id)
+                edges.append(edge)
+
+        # nicks
+        all_nicks = [(u, v, d["weight"])
+                     for (u, v, d) in self.get_edges("nick")]
+        nicks = list()
+        for nick in all_nicks:
+            is_53start = nick[0] in [u for u, _, _ in edges]
+            is_53end = nick[1] in [v for _, v, _ in edges]
+            if not is_53start and not is_53end:
+                nicks.append(nick)
+        edges += nicks
+
+        self.G.clear_edges()
+        self.G.add_weighted_edges_from(edges)
+        self._expand_graph_data()
+
+        self.split_cylces()
+        self.split_long_paths()
+
+        if reduce_iso:
+            self.reduce_isolates(possible_edges=possible_edges)
+
+    def reduce_graph_reverse(self, is_simple=True, reduce_iso=True):
         """ reduce graph for staple routing, improved version
             conditions:
                 * every node can only have one in- one out-edge
@@ -288,40 +286,32 @@ class Graph(object):
                 _g[u][v]["penalty"] = penalty
                 _g[u][v]["n"] = 7  # TODO: node size?
 
+        def edge_step_recursive(_g: nx.DiGraph, edge):
+            raise NotImplementedError
+
         _53_edges = [(u, v, d["weight"], d["penalty"])
                      for (u, v, d) in self.get_edges(typ="53")]
         nick_edges = [(u, v, d["weight"], d["penalty"])
                       for (u, v, d) in self.get_edges(typ="nick")]
+        possible_edges = self.get_edges(typ="53") + self.get_edges(typ="nick")
 
         _g = nx.DiGraph()
         _g.add_nodes_from(self.struct.scaffold_routing)
 
         for edge in sorted(_53_edges, key=lambda e: e[3]) + sorted(nick_edges, key=lambda e: e[3]):
-            edge_step(_g, edge)
-
-        for cycle in nx.simple_cycles(_g):
-            edges = list()
-            for i, u in enumerate(cycle):
-                v = cycle[(i+1) % len(cycle)]
-                penalty = _g[u][v]["penalty"]
-                edges.append((u, v, penalty))
-            max_edge = max(edges, key=lambda e: e[2])
-            _g.remove_edge(max_edge[0], max_edge[1])
-
-        longest_path = nx.dag_longest_path(_g, weight="n")
-        while len(longest_path) > 11:  # TODO: replace with cumulative n < 80
-            edges = list()
-            for i, u in enumerate(longest_path):
-                if (1 < i < len(longest_path)-3):  # NOTE: avoid short strands
-                    v = longest_path[(i+1) % len(longest_path)]
-                    penalty = _g[u][v]["penalty"]
-                    edges.append((u, v, penalty))
-            max_edge = max(edges, key=lambda e: e[2])
-            _g.remove_edge(max_edge[0], max_edge[1])
-            longest_path = nx.dag_longest_path(_g, weight="n")
+            if is_simple:
+                edge_step(_g, edge)
+            else:
+                edge_step_recursive(_g, edge)
 
         self.G = _g
         self._expand_graph_data()
+
+        self.split_cylces()
+        self.split_long_paths()
+
+        if reduce_iso:
+            self.reduce_isolates(possible_edges=possible_edges)
 
     def get_routing(self, max_bb_multi=2.3):
         pairs = [(u, v, d["distance"]) for (u, v, d) in self.get_edges(
