@@ -2,16 +2,15 @@
 # -*- coding: utf-8 -*-
 
 import logging
+from pathlib import Path
 
 import click
 import pandas as pd
-from pathlib import Path
 
-
-from fre3Dna.version import get_version
-from fre3Dna.core.attract_prep import get_scaffold_id, get_nicks
-from fre3Dna.data.structure import Structure
+from fre3Dna.core.attract_prep import get_nicks, get_scaffold_id
 from fre3Dna.data.graph import Graph
+from fre3Dna.data.structure import Structure
+from fre3Dna.version import get_version
 
 """ free form DNA Origami
 """
@@ -74,13 +73,11 @@ def staple(top, conf, forces, cutoff):
     weighted_edges = struct.generate_connectivity(cutoff=cutoff)
 
     graph = Graph(struct=struct, edges=weighted_edges)
-
-    graph.draw_network_stats()
-    graph.reduce_graph_simple()
-    struct.staple(graph.get_routing(max_bb_multi=3.3))
+    graph.reduce_graph_reverse(reduce_iso=True)
+    struct.staple(graph.get_routing(max_bb_multi=3.5))
     struct.structure_stats()
 
-    struct.write_structure("test")
-
+    # struct.write_structure("test")
+    # struct.write_sequences("test")
     graph.draw_graph()
     graph.draw_network_stats()

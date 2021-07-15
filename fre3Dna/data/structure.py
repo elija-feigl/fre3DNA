@@ -269,12 +269,11 @@ class Structure(object):
 
         if is_idt_order:
             sequences = ["Well Position, Name, Sequence"]
-            for i, strand in enumerate(self.strands.values()):
-                if not strand.is_scaffold:
-                    pos = f"{chr(i//12 + 65)}{i%12+1}"
-                    name = f"{prefix}_{strand.id}"
-                    seq = "".join(b.seq for b in strand.tour)
-                    sequences.append(f"{pos}, {name}, {seq}")
+            for i, strand in enumerate(s for s in self.strands.values() if not s.is_scaffold):
+                pos = f"{chr(i//12 + 65)}{i%12+1}"
+                name = f"{prefix}_{strand.id}"
+                seq = "".join(b.seq for b in strand.tour)
+                sequences.append(f"{pos}, {name}, {seq}")
         else:
             sequences = ["Length, ID, Sequence"]
             for i, strand in enumerate(self.strands.values()):
