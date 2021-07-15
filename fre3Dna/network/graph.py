@@ -281,7 +281,7 @@ class Graph(object):
                                   weights=list(node_weights.values())).pop()
             # select move type:
             move_type = random.choice(["in", "out"])
-           # print(list(nx.isolates(_g)))
+            # print(list(nx.isolates(_g)))
 
             # prepare move
             _h: nx.DiGraph = _g.copy()

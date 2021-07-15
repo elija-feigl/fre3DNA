@@ -23,7 +23,7 @@ import click
 import pandas as pd
 
 from fre3Dna.core.attract_prep import get_nicks, get_scaffold_id
-from fre3Dna.data.graph import Graph
+from fre3Dna.network.graph import Graph
 from fre3Dna.data.structure import Structure
 from fre3Dna.version import get_version
 
