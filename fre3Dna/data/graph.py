@@ -1,10 +1,25 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+#
+# Copyright (C) 2021  Elija Feigl
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see https://www.gnu.org/licenses/gpl-3.0.html
 
 import logging
 from dataclasses import dataclass
 from typing import List
+import random
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -30,7 +45,7 @@ class Graph(object):
         self.G.add_weighted_edges_from(self.edges)
         self._expand_graph_data()
 
-    def _expand_graph_data(self):
+    def _expand_graph_data(self, _g=None):
         def scaffold_distance(node1, node2, relative=False):
             routing = self.struct.scaffold_routing
             idx1 = routing.index(node1)
@@ -42,7 +57,10 @@ class Graph(object):
             else:
                 return dist
 
-        for edge in self.G.edges(data=True):
+        if _g is None:
+            _g = self.G
+
+        for edge in _g.edges(data=True):
             w = edge[2]["weight"]
             edge[2]["is_nick"] = True if w < 0. else False
             edge[2]["is_53"] = True if w > 0. else False
@@ -162,7 +180,7 @@ class Graph(object):
                 * iterate over double nodes and try to add node
                 * cut long staples
         """
-        def try_replace_out(_g, edge) -> bool:
+        def try_replace_out(_g: nx.DiGraph, edge) -> bool:
             target = edge[1]
             sources_old = [u for (u, v) in _g.edges() if v == target]
             if sources_old:
@@ -177,7 +195,7 @@ class Graph(object):
                 return True
             return False
 
-        def try_replace_in(_g, edge) -> bool:
+        def try_replace_in(_g: nx.DiGraph, edge) -> bool:
             source = edge[0]
             targets_old = [v for (u, v) in _g.edges() if u == source]
             if targets_old:
@@ -215,6 +233,110 @@ class Graph(object):
 
         self.G = _g
         self._expand_graph_data()
+
+    def optimize_routing_metropolis(self, possible_edges, steps=1e3):
+        """ metropolis like algorithm that reduces the average edge penalty.
+            possible steps:
+            * remove an edge
+            * add an edge
+            * replace an edge
+            rules:
+            * must not close a ring
+        """
+
+        def get_score(_g: nx.DiGraph, measure="penalty") -> float:
+            edges = [(u, v, d) for (u, v, d) in _g.edges(data=True)]
+            avg_penalty = sum(d[measure]
+                              for _, _, d in edges) / len(edges) - 1.
+
+            isolate_penalty = sum(
+                3. for c in nx.weakly_connected_components(_g) if len(c) == 1)
+            disolate_penalty = sum(
+                1. for c in nx.weakly_connected_components(_g) if len(c) == 2)
+            try:
+                next(nx.simple_cycles(_g))
+                cycle_penalty = 100.
+            except StopIteration:
+                cycle_penalty = 0.
+            # length penalyt
+            score = avg_penalty + isolate_penalty + disolate_penalty + cycle_penalty
+            return score
+
+        def get_node_weights(_g: nx.DiGraph):
+            node_weights = dict()
+            for component in nx.weakly_connected_components(_g):
+                weight = 1./len(component)
+                for node in component:
+                    node_weights[node] = weight
+            return node_weights
+
+        # TODO: don't work with full tree to save time
+        _g: nx.DiGraph = self.G.copy()
+        score = get_score(_g)
+        node_weights = get_node_weights(_g)
+
+        for _ in range(steps):
+            # select node using weighted random choice -> get_node_weights()
+            node = random.choices(list(node_weights.keys()),
+                                  weights=list(node_weights.values())).pop()
+            # select move type:
+            move_type = random.choice(["in", "out"])
+           # print(list(nx.isolates(_g)))
+
+            # prepare move
+            _h: nx.DiGraph = _g.copy()
+            if move_type == "in":
+                old_edge = next(((u, v)
+                                for (u, v) in _h.edges() if v == node), None)
+                candidates = [(u, v, d) for (u, v, d)
+                              in possible_edges if ((v == node) and (abs(u-v) > 1) and ((u, v) != old_edge))]
+                if not candidates:
+                    # self.logger.info(
+                    #    f"Rejected move {move_type} for node {node}. impossible")
+                    continue
+                # TODO: maybe add penalty as a weight for the choice?
+                new_edge = random.choice(candidates)
+                old_edge_comp = next(((u, v)
+                                      for (u, v) in _h.edges() if u == new_edge[0]), None)
+
+            elif move_type == "out":
+                old_edge = next(((u, v)
+                                for (u, v) in _h.edges() if u == node), None)
+                candidates = [(u, v, d) for (u, v, d)
+                              in possible_edges if ((u == node) and (abs(u-v) > 1) and ((u, v) != old_edge))]
+                if not candidates:
+                    # self.logger.info(
+                    #    f"Rejected move {move_type} for node {node}. impossible")
+                    continue
+                # TODO: maybe add penalty as a weight for the choice?
+                new_edge = random.choice(candidates)
+                old_edge_comp = next(((u, v)
+                                      for (u, v) in _h.edges() if v == new_edge[1]), None)
+
+            # update move
+            if old_edge is not None:
+                _h.remove_edge(old_edge[0], old_edge[1])
+            if old_edge_comp is not None:
+                _h.remove_edge(old_edge_comp[0], old_edge_comp[1])
+            _h.add_edge(new_edge[0], new_edge[1], weight=new_edge[2]["weight"])
+            self._expand_graph_data(_h)
+
+            # metropolis decision
+            new_score = get_score(_h)
+            alpha = min(1., np.exp(-new_score)/np.exp(-score))
+
+            if alpha >= random.random():
+                _g = _h
+                node_weights = get_node_weights(_g)
+                score = new_score
+                # self.logger.info(
+                #    f"Accepted move: {old_edge}->{new_edge[:2]}; {move_type} with probability {alpha}")
+            else:
+                _h = _g
+                # self.logger.info(
+                #    f"Rejected move: {old_edge}->{new_edge[:2]}; {move_type} with probability {alpha}")
+
+        self.G = _g
 
     def reduce_graph_direct(self, reduce_iso=True):
         """ reduce graph for staple routing
@@ -307,11 +429,13 @@ class Graph(object):
         self.G = _g
         self._expand_graph_data()
 
+        # if reduce_iso:
+        self.reduce_isolates(possible_edges=possible_edges)
         self.split_cylces()
         self.split_long_paths()
 
-        if reduce_iso:
-            self.reduce_isolates(possible_edges=possible_edges)
+        # self.optimize_routing_metropolis(
+        #    possible_edges=possible_edges, steps=int(1e6))
 
     def get_routing(self, max_bb_multi=2.3):
         pairs = [(u, v, d["distance"]) for (u, v, d) in self.get_edges(
