@@ -26,7 +26,7 @@ import networkx as nx
 import numpy as np
 
 from ..core.util import BB_DIST
-from .structure import Structure
+from ..data.structure import Structure
 
 """ fre3DNA connectivity graph class.
 """
@@ -258,7 +258,7 @@ class Graph(object):
                 cycle_penalty = 100.
             except StopIteration:
                 cycle_penalty = 0.
-            # length penalyt
+            # length penalty
             score = avg_penalty + isolate_penalty + disolate_penalty + cycle_penalty
             return score
 
