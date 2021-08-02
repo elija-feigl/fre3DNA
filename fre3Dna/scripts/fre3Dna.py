@@ -73,8 +73,75 @@ def prep(top, conf):
 @click.argument('conf', type=click.Path(exists=True))
 @click.argument('forces', type=click.Path(exists=True))
 @click.argument('cutoff', type=float)
-def staple(top, conf, forces, cutoff):
+@click.option('--o', 'out',  type=str, default=None,
+              help="new file name, default to conf-name_out")
+def pipeline(top, conf, forces, cutoff, out):
+    """ close staples perform analysis and print new files and sequences
+
+        TOP is the name of the design file [.top]\n
+        CONF is the scaffold strand sequence file [.oxdna, .dat]\n
+        FORCES is the oxDNA external force file containing the basepair information []\n
+        CUTOFF multiple of Backbone-Backbone distance to be considered for staple routing\n
+    """
+    if out is None:
+        out = f"{Path(conf).stem}_out"
+    struct = Structure()
+    struct.generate_from_oxDNA(top=Path(top), conf=Path(conf))
+    struct.assign_basepairs(forces=Path(forces))
+    struct.categorise_structure()
+    weighted_edges = struct.generate_connectivity(cutoff=cutoff)
+
+    graph = Graph(struct=struct, edges=weighted_edges)
+    graph.reduce_graph_reverse(reduce_iso=True, optimize_mc=False)
+    staple_linkage = graph.get_routing(max_bb_multi=3.5)
+    struct.staple(staple_linkage)
+
+    struct.write_structure(out)
+    struct.write_sequences(out)
+
+    struct.structure_stats()
+    graph.draw_graph()
+    graph.draw_network_stats()
+
+
+@cli.command()
+@click.argument('top', type=click.Path(exists=True))
+@click.argument('conf', type=click.Path(exists=True))
+@click.argument('forces', type=click.Path(exists=True))
+@click.argument('cutoff', type=float)
+@click.option('--o', 'out',  type=str, default=None,
+              help="new file name, default to conf-name_out")
+def staple(top, conf, forces, cutoff, out):
     """ close staples
+
+        TOP is the name of the design file [.top]\n
+        CONF is the scaffold strand sequence file [.oxdna, .dat]\n
+        FORCES is the oxDNA external force file containing the basepair information []\n
+        CUTOFF multiple of Backbone-Backbone distance to be considered for staple routing\n
+    """
+    if out is None:
+        out = f"{Path(conf).stem}_out"
+    struct = Structure()
+    struct.generate_from_oxDNA(top=Path(top), conf=Path(conf))
+    struct.assign_basepairs(forces=Path(forces))
+    struct.categorise_structure()
+    weighted_edges = struct.generate_connectivity(cutoff=cutoff)
+
+    graph = Graph(struct=struct, edges=weighted_edges)
+    graph.reduce_graph_reverse(reduce_iso=True, optimize_mc=False)
+    staple_linkage = graph.get_routing(max_bb_multi=3.5)
+
+    struct.staple(staple_linkage)
+    struct.write_structure(out)
+
+
+@cli.command()
+@click.argument('top', type=click.Path(exists=True))
+@click.argument('conf', type=click.Path(exists=True))
+@click.argument('forces', type=click.Path(exists=True))
+@click.argument('cutoff', type=float)
+def analyse(top, conf, forces, cutoff):
+    """ analyse structure graph
 
         TOP is the name of the design file [.top]\n
         CONF is the scaffold strand sequence file [.oxdna, .dat]\n
@@ -85,14 +152,27 @@ def staple(top, conf, forces, cutoff):
     struct.generate_from_oxDNA(top=Path(top), conf=Path(conf))
     struct.assign_basepairs(forces=Path(forces))
     struct.categorise_structure()
-    weighted_edges = struct.generate_connectivity(cutoff=cutoff)
-
-    graph = Graph(struct=struct, edges=weighted_edges)
-    graph.reduce_graph_reverse(reduce_iso=True)
-    struct.staple(graph.get_routing(max_bb_multi=3.5))
     struct.structure_stats()
 
-    # struct.write_structure("test")
-    # struct.write_sequences("test")
+    weighted_edges = struct.generate_connectivity(cutoff=cutoff)
+    graph = Graph(struct=struct, edges=weighted_edges)
     graph.draw_graph()
     graph.draw_network_stats()
+
+
+@cli.command()
+@click.argument('top', type=click.Path(exists=True))
+@click.argument('conf', type=click.Path(exists=True))
+@click.option('--o', 'out',  type=str, default=None,
+              help="sequence file name, default to conf name")
+def sequence(top, conf, out):
+    """ analyse structure graph
+
+        TOP is the name of the design file [.top]\n
+        CONF is the scaffold strand sequence file [.oxdna, .dat]\n
+    """
+    if out is None:
+        out = Path(conf).stem
+    struct = Structure()
+    struct.generate_from_oxDNA(top=Path(top), conf=Path(conf))
+    struct.write_sequences(out)

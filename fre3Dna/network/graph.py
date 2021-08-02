@@ -35,7 +35,7 @@ from ..data.structure import Structure
 @dataclass
 class Graph(object):
     edges: List[tuple]
-    struct: Structure
+    struct: Structure  # TODO: only used for scaffold routing
 
     def __post_init__(self):
         self.logger = logging.getLogger(__name__)
@@ -389,7 +389,7 @@ class Graph(object):
         if reduce_iso:
             self.reduce_isolates(possible_edges=possible_edges)
 
-    def reduce_graph_reverse(self, is_simple=True, reduce_iso=True):
+    def reduce_graph_reverse(self, is_simple=True, reduce_iso=True, optimize_mc=False):
         """ reduce graph for staple routing, improved version
             conditions:
                 * every node can only have one in- one out-edge
@@ -429,13 +429,14 @@ class Graph(object):
         self.G = _g
         self._expand_graph_data()
 
-        # if reduce_iso:
-        self.reduce_isolates(possible_edges=possible_edges)
-        self.split_cylces()
-        self.split_long_paths()
+        if reduce_iso:
+            self.reduce_isolates(possible_edges=possible_edges)
+            self.split_cylces()
+            self.split_long_paths()
 
-        # self.optimize_routing_metropolis(
-        #    possible_edges=possible_edges, steps=int(1e6))
+        if optimize_mc:
+            self.optimize_routing_metropolis(
+                possible_edges=possible_edges, steps=int(1e6))
 
     def get_routing(self, max_bb_multi=2.3):
         pairs = [(u, v, d["distance"]) for (u, v, d) in self.get_edges(
