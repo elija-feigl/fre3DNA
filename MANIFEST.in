@@ -1,4 +1,7 @@
-include fre3Dna/README.md
-include fre3Dna/CONTRIBUTIONS.md
-include fre3Dna/LICENSE
+include README.md
+include CONTRIBUTIONS.md
+include LICENSE
+include setup.cfg
+include pyproject.toml
+include MANIFEST.in
 recursive-include fre3Dna/resources *

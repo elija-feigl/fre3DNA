@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #
 # Copyright (C) 2021  Elija Feigl
 #
@@ -15,9 +14,12 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see https://www.gnu.org/licenses/gpl-3.0.html.
-
 import logging
 from pathlib import Path
+
+
+def get_version() -> str:
+    return __version__
 
 
 def get_resource(resources: str) -> Path:
@@ -29,9 +31,15 @@ def _init_logging():
     logger.setLevel(logging.DEBUG)
     handler = logging.StreamHandler()
     formatter = logging.Formatter(
-        '%(asctime)s | [%(name)s] %(levelname)s - %(message)s')
+        "%(asctime)s | [%(module)s]\t%(levelname)s\t- %(message)s", "%Y.%m.%d %H:%M"
+    )
     handler.setFormatter(formatter)
-    logger.addHandler(handler)
 
 
 _init_logging()
+
+
+version_info = [0, 7, 0, "dev0"]
+
+__version__ = ".".join([str(sub) for sub in version_info])
+__all__ = ["__version__"]
