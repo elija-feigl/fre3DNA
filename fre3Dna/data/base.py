@@ -1,23 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-#
-# Copyright (C) 2021  Elija Feigl
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see https://www.gnu.org/licenses/gpl-3.0.html.
-
+# Copyright (C) 2021-Present  Elija Feigl
+# Full GPL-3 License can be found in `LICENSE` at the project root.
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
+from typing import Optional
 
 import numpy as np
 
@@ -26,7 +12,7 @@ import numpy as np
 
 
 @dataclass
-class Base(object):
+class Base:
     id: int
     seq: str
     strand_id: Optional[int]
@@ -45,8 +31,8 @@ class Base(object):
     across: Optional["Base"] = None
 
     def bb_position(self) -> np.ndarray:
-        """ backbone position for oxDNA2 (w. grooving)
-            oxDNA1: self.position - 0.40 * self.bb2base_versor
+        """backbone position for oxDNA2 (w. grooving)
+        oxDNA1: self.position - 0.40 * self.bb2base_versor
         """
         thrid_versor = np.cross(self.normversor, self.bb2base_versor)
         return self.position - 0.34 * self.bb2base_versor + 0.3408 * thrid_versor
@@ -58,11 +44,11 @@ class Base(object):
         return self.position + 0.34 * self.bb2base_versor
 
     def conf(self) -> str:
-        pos = ' '.join(map(str, self.position))
-        v_1 = ' '.join(map(str, self.bb2base_versor))
-        v_3 = ' '.join(map(str, self.normversor))
-        vel = ' '.join(map(str, self.velocity))
-        a_vel = ' '.join(map(str, self.angular_velocity))
+        pos = " ".join(map(str, self.position))
+        v_1 = " ".join(map(str, self.bb2base_versor))
+        v_3 = " ".join(map(str, self.normversor))
+        vel = " ".join(map(str, self.velocity))
+        a_vel = " ".join(map(str, self.angular_velocity))
         return f"{pos} {v_1} {v_3} {vel} {a_vel}"
 
     def top(self) -> str:

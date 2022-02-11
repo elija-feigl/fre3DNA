@@ -1,25 +1,11 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-#
-# Copyright (C) 2021  Elija Feigl
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see https://www.gnu.org/licenses/gpl-3.0.html.
-
+# Copyright (C) 2021-Present  Elija Feigl
+# Full GPL-3 License can be found in `LICENSE` at the project root.
 from dataclasses import dataclass
-from .base import Base
+from typing import Any
+from typing import List
 
-from typing import Any, List
+from .base import Base
 
 """ OxDNA strand class.
     direction from 5' to 3' end
@@ -28,7 +14,7 @@ from typing import Any, List
 
 
 @dataclass
-class Strand(object):
+class Strand:
     id: int
     struct: Any
     tour: List[Base]
