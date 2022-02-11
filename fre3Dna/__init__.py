@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see https://www.gnu.org/licenses/gpl-3.0.html.
 import logging
+import os
 from pathlib import Path
 
 
@@ -34,6 +35,21 @@ def _init_logging():
         "%(asctime)s | [%(module)s]\t%(levelname)s\t- %(message)s", "%Y.%m.%d %H:%M"
     )
     handler.setFormatter(formatter)
+
+    if os.name != "nt":  # no ANSI escape support on Windows
+        logging.addLevelName(
+            logging.DEBUG, "\033[1;34m%s\033[1;0m" % logging.getLevelName(logging.DEBUG)
+        )
+        logging.addLevelName(
+            logging.WARNING, "\033[1;32m%s\033[1;0m" % logging.getLevelName(logging.WARNING)
+        )
+        logging.addLevelName(
+            logging.ERROR, "\033[1;33m%s\033[1;0m" % logging.getLevelName(logging.ERROR)
+        )
+        logging.addLevelName(
+            logging.CRITICAL, "\033[1;31m%s\033[1;0m" % logging.getLevelName(logging.CRITICAL)
+        )
+    logger.addHandler(handler)
 
 
 _init_logging()
